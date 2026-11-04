@@ -5,3 +5,9 @@ SoccerNet==0.2.0         # SoccerNet downloader (play-recognition features/label
 huggingface_hub==2.4.0   # backend for SoccerNet downloads; optional auth for rate limits
 numpy==2.5.4
 pandas==3.1.0
+
+# EDA stage (notebooks/eda.ipynb)
+matplotlib==3.11.2
+ipykernel==7.4.0
+nbformat==5.11.1
+nbconvert==7.17.2

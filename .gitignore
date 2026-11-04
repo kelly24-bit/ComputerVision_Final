@@ -1,0 +1,14 @@
+# Downloaded + derived data — never commit (large, and license-restricted)
+data/raw/
+data/processed/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+
+# Notebooks / OS
+.ipynb_checkpoints/
+.DS_Store

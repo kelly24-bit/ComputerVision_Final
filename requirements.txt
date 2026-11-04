@@ -1,0 +1,7 @@
+# Data-acquisition stage only. Modelling deps come later.
+# Pinned to the versions verified on 2026-11-03 (Python 3.13.5, Windows 11).
+statsbombpy==1.22.0      # StatsBomb open data (formation test set) — no account
+SoccerNet==0.2.0         # SoccerNet downloader (play-recognition features/labels)
+huggingface_hub==2.4.0   # backend for SoccerNet downloads; optional auth for rate limits
+numpy==2.5.4
+pandas==3.1.0

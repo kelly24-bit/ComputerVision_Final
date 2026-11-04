@@ -108,4 +108,4 @@ The `report/` folder from the original plan isn't created yet.
 
 ## Notes
 
-Never commit tokens or keys. Pushing to `github.com/kelly24-bit/soccer-cv` needs your own GitHub auth (`gh auth login` or a personal access token).
+Never commit tokens or keys. Pushing to `github.com/kelly24-bit/ComputerVision_Final` needs your own GitHub auth (`gh auth login` or a personal access token).

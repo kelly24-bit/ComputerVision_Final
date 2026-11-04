@@ -37,7 +37,7 @@ brings in.
 
 | Piece | Source | Access | What we take |
 |-------|--------|--------|--------------|
-| Play recognition | `SoccerNet/SN-Features` + `SoccerNet/SN-Labels` (Hugging Face) | **Open, no login needed** | Pre-extracted ResNet features (`resnet-tf2-pca512`) + `Labels-v2.json` (17 classes). **No raw video needed.** |
+| Play recognition | `SoccerNet/SN-Features` + `SoccerNet/SN-Labels` (Hugging Face) | Open, no login needed | Pre-extracted ResNet features (`resnet-tf2-pca512`) + `Labels-v2.json` (17 classes). **No raw video needed.** |
 | Perception | `github.com/SoccerNet/sn-gamestate` (+ sn-calibration, sn-tracking) | Dataset gated via HF | End-to-end detect/track/calibrate → top-down minimap |
 | Formation — training | our own procedural generator | none | Synthetic player coordinates |
 | Formation — real test set | StatsBomb open data (`statsbombpy`) | **Open, no NDA** | `sb.frames()` 360 coordinates + `sb.lineups()` formation labels |
@@ -54,22 +54,22 @@ ball-action 12-class set, anything tagged `-2027`, and `SoccerNet_raw_HQ`
 | Source | Verifiable from a fresh machine? | Success looks like |
 |--------|----------------------------------|--------------------|
 | StatsBomb | **Yes — open, no access needed** | `sb.competitions()` returns rows; a World Cup match's `frames()` and `lineups()` load, with a formation label present |
-| SoccerNet features/labels | **Yes — open, no login needed** | `*.npy` feature files + `Labels-v2.json` download and open, shapes look right (verified: `(5399, 512)` features, 195 annotations for one game) |
+| SoccerNet features/labels | Yes, open, no login needed | `*.npy` feature files + `Labels-v2.json` download and open with sensible shapes (checked: `(5399, 512)` features and 195 annotations for one game) |
 | sn-gamestate | Only after HF gated-access approval | baseline runs on one sample clip and emits minimap coordinates |
 
-StatsBomb and the SoccerNet features/labels can both be smoke-tested right now
-on a fresh machine; each script prints exactly what a healthy result looks like.
-Only sn-gamestate (not yet checked) may need gated access.
+StatsBomb and the SoccerNet features/labels both work on a fresh machine, and
+each script prints what a good result looks like. sn-gamestate hasn't been
+checked yet and may be gated.
 
 ## Access notes
 
-1. **SoccerNet features/labels (SN-Features, SN-Labels): both datasets are open —
-   no Hugging Face login or approval is needed.** Optionally, run
-   `hf auth login` (or set `HF_TOKEN`) to get higher rate limits and faster
-   downloads; without it you just see an "unauthenticated requests" warning.
-2. sn-gamestate: may be gated on Hugging Face; request access on its dataset
-   page if the download is refused.
-3. StatsBomb: read/accept the open-data user agreement in their repo. No login.
+1. SoccerNet features/labels (SN-Features, SN-Labels) are open, so no Hugging
+   Face login or approval is needed. If you want higher rate limits and faster
+   downloads, run `hf auth login` or set `HF_TOKEN`. Without it you just get an
+   "unauthenticated requests" warning.
+2. sn-gamestate may be gated on Hugging Face. If the download is refused,
+   request access on its dataset page.
+3. StatsBomb: accept the open-data user agreement in their repo. No login.
 
 **Push target:** `github.com/kelly24-bit` — set the git remote here. The
 username alone grants no access; authenticate separately (`gh auth login` or a

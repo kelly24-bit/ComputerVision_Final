@@ -1,12 +1,13 @@
 """Download + verify SoccerNet play-recognition data (features + labels).
 
-SoccerNet/SN-Features and SoccerNet/SN-Labels are both open: no Hugging Face
-account, login or access approval is needed. We pull pre-extracted features +
-Labels-v2.json only -- NOT the NDA-gated raw video.
+SoccerNet/SN-Features and SoccerNet/SN-Labels are open, so no Hugging Face
+account or login is needed. This only pulls the pre-extracted features and
+Labels-v2.json, not the NDA-gated raw video.
 
 Run:        python scripts/download_soccernet.py
-Optional:   `hf auth login` (or set HF_TOKEN) for higher rate limits / faster
-            downloads. Without it you just see an "unauthenticated" warning.
+Optional:   `hf auth login` (or set HF_TOKEN) gives higher rate limits and
+            faster downloads. Without it you get an "unauthenticated" warning
+            and nothing else changes.
 
 Success means: one game's ResNet feature .npy and its Labels-v2.json download
 and open with sane shapes.
@@ -35,8 +36,8 @@ def main():
         d.downloadGames(files=FILES, split=["valid"])
     except Exception as e:  # noqa: BLE001 - surface the real cause to the user
         sys.exit(
-            "[fail] download error. Both datasets are open (no login needed), "
-            "so check your network connection first; if you are being "
+            "[fail] download error. Both datasets are open, so a login isn't "
+            "the problem. Check your network first; if you're being "
             "rate-limited, try `hf auth login` or set HF_TOKEN.\n\n"
             f"{e}"
         )

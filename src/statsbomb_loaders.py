@@ -1,25 +1,25 @@
-"""StatsBomb open-data loaders for the 2022 men's World Cup (formation EDA).
+"""StatsBomb open-data loaders for the 2022 men's World Cup formation EDA.
 
-Everything pulled from the API is cached as gzipped JSON under
-data/raw/statsbomb (git-ignored), so each match is fetched at most once:
+Whatever comes back from the API is cached as gzipped JSON under
+data/raw/statsbomb (git-ignored), so each match is only fetched once:
 
     data/raw/statsbomb/
         matches.json.gz
-        events/<match_id>.json.gz     raw `sb.events(fmt="json")`  {event_id: event}
-        frames/<match_id>.json.gz     raw `sb.frames(fmt="json")`  [{event_uuid, freeze_frame, ...}]
+        events/<match_id>.json.gz     raw sb.events(fmt="json"), {event_id: event}
+        frames/<match_id>.json.gz     raw sb.frames(fmt="json"), [{event_uuid, freeze_frame, ...}]
 
-Parsing helpers turn the raw cache into small DataFrames:
+The parsing functions turn that cache into small DataFrames:
 
-    tactics_table()     one row per Starting XI / Tactical Shift event
-    formation_labels()  one row per (match, team): starting formation
-    build_frame_table() one row per 360 freeze-frame (player-visibility counts)
-    team_view_table()   one row per (freeze-frame, team): that team's visible
-                        players + its starting / active formation label
+    tactics_table()      one row per Starting XI / Tactical Shift event
+    formation_labels()   one row per (match, team) with the starting formation
+    build_frame_table()  one row per 360 freeze-frame, with visible-player counts
+    team_view_table()    one row per (freeze-frame, team), with that team's
+                         visible player count and its starting / active formation
 
-Terminology used throughout:
-    team-match   one team in one match (teams x matches); the *independent* unit.
-    snapshot     one team's view of one freeze-frame; many per team-match, and
-                 highly correlated within a team-match (the *inflated* unit).
+Terms:
+    team-match   one team in one match (teams x matches). The independent unit.
+    snapshot     one team's view of one freeze-frame. Many per team-match and
+                 highly correlated with each other, so counts of them are inflated.
 """
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ def _read(p: Path):
 
 
 def _write(p: Path, obj) -> None:
-    """Atomic write so an interrupted run never leaves a half-written cache file."""
+    """Write to a temp file first so an interrupted run can't leave a broken cache file."""
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix(p.suffix + ".tmp")
     with gzip.open(tmp, "wt", encoding="utf-8") as f:
@@ -61,7 +61,7 @@ def _write(p: Path, obj) -> None:
 
 
 def _sb():
-    from statsbombpy import sb  # imported lazily: cached runs need no network
+    from statsbombpy import sb  # imported here so cached runs don't need it
 
     return sb
 
@@ -86,7 +86,7 @@ def get_events_raw(match_id: int, refresh: bool = False) -> dict:
 
 
 def get_frames_raw(match_id: int, refresh: bool = False) -> list:
-    """Raw 360 freeze-frames; [] (cached) if the match has none."""
+    """Raw 360 freeze-frames. Returns (and caches) [] if the match has none."""
     p = _path("frames", match_id)
     if p.exists() and not refresh:
         return _read(p)
@@ -97,10 +97,10 @@ def get_frames_raw(match_id: int, refresh: bool = False) -> list:
 
 
 def cache_all(pause: float = 0.2, verbose: bool = True) -> dict:
-    """Pull + cache matches, events and frames for every WC match.
+    """Pull and cache matches, events and frames for every World Cup match.
 
-    Only missing files hit the API; `pause` seconds are slept between fetches.
-    Returns {"fetched": n, "cached": n} counted in (match, kind) units.
+    Only files that aren't cached yet hit the API, with `pause` seconds between
+    fetches. Returns {"fetched": n, "cached": n}, counted per (match, kind).
     """
     matches = get_matches()
     fetched = cached = 0
@@ -123,18 +123,18 @@ def _match_ids() -> list[int]:
 
 
 def _fmt_formation(x) -> str | None:
-    """Raw formation (int like 433, or odd/None) -> '433' string, None if absent."""
+    """Turn a raw formation (433, or None/odd) into '433', or None if missing."""
     if x is None or (isinstance(x, float) and pd.isna(x)):
         return None
     return str(x)
 
 
 def tactics_table(match_ids: list[int] | None = None) -> pd.DataFrame:
-    """One row per event carrying a `tactics` dict (Starting XI / Tactical Shift).
+    """One row per event with a `tactics` dict (Starting XI or Tactical Shift).
 
     Columns: match_id, event_id, index, period, minute, second, team_id, team,
-    type, formation (str|None), formation_raw, lineup_len, tactics_ok (False if
-    `tactics` is not a dict with a 'formation' key and a list 'lineup').
+    type, formation (str or None), formation_raw, lineup_len, and tactics_ok
+    (False if `tactics` isn't a dict with a 'formation' and a list 'lineup').
     """
     rows = []
     for mid in match_ids or _match_ids():
@@ -165,7 +165,7 @@ def tactics_table(match_ids: list[int] | None = None) -> pd.DataFrame:
 
 
 def formation_labels(tactics: pd.DataFrame) -> pd.DataFrame:
-    """One row per (match, team): the Starting XI formation (the team-match label)."""
+    """One row per (match, team) with its Starting XI formation, the team-match label."""
     s = tactics[tactics["type"] == "Starting XI"]
     return s[["match_id", "team", "formation", "lineup_len", "tactics_ok"]].rename(
         columns={"formation": "formation_start"}
@@ -176,9 +176,9 @@ def build_frame_table(match_ids: list[int] | None = None) -> pd.DataFrame:
     """One row per 360 freeze-frame, joined to its event.
 
     Columns: match_id, event_id, index, period, minute, second, event_type,
-    team (the team that performed the event), opponent, n_total (all visible
-    players), n_event_team (teammates of the event team, incl. the actor),
-    n_opponent, has_visible_area, event_found.
+    team (who performed the event), opponent, n_total (all visible players),
+    n_event_team (the event team's players, actor included), n_opponent,
+    has_visible_area, event_found.
     """
     rows = []
     for mid in match_ids or _match_ids():
@@ -213,13 +213,13 @@ def build_frame_table(match_ids: list[int] | None = None) -> pd.DataFrame:
 
 
 def team_view_table(frames: pd.DataFrame, tactics: pd.DataFrame) -> pd.DataFrame:
-    """Expand each freeze-frame into one snapshot row per team and attach labels.
+    """Split each freeze-frame into one snapshot per team and attach formation labels.
 
-    Each frame yields two snapshots: the event team's players and the opponent's
-    players. Columns: match_id, event_id, index, team, view ('event_team' |
-    'opponent'), n_visible, formation_start (team-match label),
-    formation_active (latest Starting XI / Tactical Shift at or before the
-    event), formation_shifted (active != start).
+    A frame gives two snapshots: the event team's players and the opponent's.
+    Columns: match_id, event_id, index, team, view ('event_team' or 'opponent'),
+    n_visible, formation_start (the team-match label), formation_active (the
+    latest Starting XI / Tactical Shift at or before the event) and
+    formation_shifted (active differs from start).
     """
     f = frames[frames["event_found"]]
     own = f.assign(view="event_team", n_visible=f["n_event_team"])

@@ -1,20 +1,16 @@
-"""Data loaders for data/raw/soccernet.
+"""Loaders for the SoccerNet files in data/raw/soccernet.
 
-On-disk layout (after scripts/download_soccernet.py):
+Layout after running scripts/download_soccernet.py:
 
     data/raw/soccernet/
-        .cache/                      <- Hugging Face download cache; SKIPPED
+        .cache/                      Hugging Face cache, ignored here
         <league>/<season>/<game>/    e.g. england_epl/2014-2015/2015-04-11 - 19-30 Burnley 0 - 1 Arsenal
-            1_ResNET_TF2_PCA512.npy  <- first-half features, shape (frames, 512)
-            2_ResNET_TF2_PCA512.npy  <- second-half features
-            Labels-v2.json           <- {"annotations": [...], "gameHomeTeam": ..., ...}
+            1_ResNET_TF2_PCA512.npy  first-half features, (frames, 512)
+            2_ResNET_TF2_PCA512.npy  second-half features
+            Labels-v2.json           {"annotations": [...], "gameHomeTeam": ..., ...}
 
-Note: only the splits that were downloaded are present (the download script
-fetches 'valid'), so "all games" means all games on disk.
-
-Usage (from notebooks/eda.ipynb):
-
-    from src.data_loaders import iter_games, load_game, build_annotation_table
+Only the 'valid' split gets downloaded, so "all games" here means every game
+on disk, not all of SoccerNet.
 """
 from __future__ import annotations
 
@@ -30,8 +26,8 @@ RAW_ROOT = Path("data/raw/soccernet")
 FEATURE_FILES = ("1_ResNET_TF2_PCA512.npy", "2_ResNET_TF2_PCA512.npy")
 LABELS_FILE = "Labels-v2.json"
 
-# The 17 SoccerNet-v2 action classes. Kept explicit so classes with zero
-# examples still show up in count tables.
+# the 17 SoccerNet-v2 classes, listed out so a class with zero examples
+# still shows up in the count tables
 CLASSES_V2 = (
     "Penalty",
     "Kick-off",
@@ -55,7 +51,7 @@ CLASSES_V2 = (
 
 @dataclass(frozen=True)
 class GameRef:
-    """Pointer to one game directory; no data is loaded until asked."""
+    """Points at one game directory. Nothing is loaded until you ask."""
 
     league: str
     season: str
@@ -68,16 +64,16 @@ class GameRef:
 
 
 def _subdirs(p: Path) -> list[Path]:
-    """Visible (non-hidden) subdirectories, sorted for deterministic order."""
+    """Non-hidden subdirectories, sorted."""
     return sorted(d for d in p.iterdir() if d.is_dir() and not d.name.startswith("."))
 
 
 def iter_games(root: Path = RAW_ROOT) -> Iterator[GameRef]:
-    """Walk root/<league>/<season>/<game>/ and yield a GameRef per game dir.
+    """Yield a GameRef for each root/<league>/<season>/<game>/ directory.
 
-    Hidden directories (notably .cache/) are skipped at every level. A game
-    directory is yielded even if some of its files are missing, so that the
-    data-quality checks can report the gaps rather than silently hide them.
+    Hidden directories (like .cache/) are skipped. A game directory is still
+    yielded if some of its files are missing, so the quality checks can report
+    the gap instead of it going unnoticed.
     """
     root = Path(root)
     if not root.is_dir():
@@ -99,11 +95,11 @@ def _parse_game_time(s: str) -> tuple[float, float]:
 
 
 def load_game(ref: GameRef, mmap: bool = False) -> dict:
-    """Load one game: per-half feature arrays + parsed Labels-v2.json.
+    """Load one game's feature arrays (one per half) and its Labels-v2.json.
 
     Returns {"ref": GameRef, "features": [half1, half2], "labels": dict | None}.
-    A missing/unreadable file yields None in its slot (never raises), so
-    callers can audit gaps. Set mmap=True to avoid reading arrays into memory.
+    A missing or unreadable file comes back as None instead of raising.
+    mmap=True avoids reading the arrays into memory.
     """
     features: list[np.ndarray | None] = []
     for fname in FEATURE_FILES:
@@ -123,11 +119,11 @@ def load_game(ref: GameRef, mmap: bool = False) -> dict:
 
 
 def build_annotation_table(root: Path = RAW_ROOT) -> pd.DataFrame:
-    """Aggregate annotations across ALL games into one long DataFrame.
+    """All annotations from every game in one long DataFrame.
 
     One row per annotation: league, season, game, game_id, label, team,
-    visibility, half, seconds (within half), position_ms. Feed it to
-    `class_count_table` for the per-class counts.
+    visibility, half, seconds (within the half), position_ms. Pass it to
+    `class_count_table` to get per-class counts.
     """
     rows = []
     for ref in iter_games(root):
@@ -160,11 +156,11 @@ def build_annotation_table(root: Path = RAW_ROOT) -> pd.DataFrame:
 
 
 def class_count_table(ann: pd.DataFrame, classes=CLASSES_V2) -> pd.DataFrame:
-    """Per-class counts across all games, including zero-count classes.
+    """Per-class counts across all games, including classes with zero examples.
 
-    Columns: count, share (fraction of all annotations), n_games (games with
-    >=1 instance). Sorted by count descending. Labels not in `classes` are kept
-    (so unexpected classes are visible, not dropped).
+    Columns: count, share (of all annotations), n_games (games with at least
+    one). Sorted by count, largest first. Labels outside `classes` are kept
+    so an unexpected class shows up instead of being dropped.
     """
     counts = ann["label"].value_counts()
     n_games = ann.groupby("label")["game_id"].nunique()
@@ -187,14 +183,14 @@ EXPECTED_ANN_KEYS = frozenset({"gameTime", "label", "position", "team", "visibil
 
 
 def audit_label_schema(root: Path = RAW_ROOT, tol_s: float = 1.5) -> pd.DataFrame:
-    """One row per game describing schema oddities in Labels-v2.json.
+    """One row per game with counts of oddities in its Labels-v2.json.
 
     Columns: game_id, file_ok, n_annotations, extra_top_keys, missing_top_keys,
-    n_ann_bad_keys (annotations whose key set != the expected 5),
-    n_bad_gametime (gameTime not '<half> - mm:ss'), n_bad_position (position
-    not an int string), n_time_mismatch (|position_ms/1000 - gameTime seconds|
-    > tol_s), n_bad_team (team not in home/away/'not applicable'), n_url_mismatch (UrlLocal does
-    not match the game's directory path).
+    n_ann_bad_keys (annotation keys differ from the expected 5), n_bad_gametime
+    (gameTime isn't '<half> - mm:ss'), n_bad_position (position isn't an int
+    string), n_time_mismatch (position_ms/1000 and the gameTime seconds differ
+    by more than tol_s), n_bad_team (team isn't home, away or 'not applicable'),
+    n_url_mismatch (UrlLocal doesn't match the game's directory).
     """
     rows = []
     for ref in iter_games(root):
@@ -236,11 +232,11 @@ def audit_label_schema(root: Path = RAW_ROOT, tol_s: float = 1.5) -> pd.DataFram
 
 
 def build_feature_summary(root: Path = RAW_ROOT) -> pd.DataFrame:
-    """Per-game, per-half feature-array metadata across all games.
+    """Feature-array info for every game and half.
 
     One row per (game, half): file_present, n_frames, feature_dim, dtype,
-    n_nan, n_inf, min, max, mean, std. Missing/unreadable files get
-    file_present=False and NaNs, so they are visible in the table.
+    n_nan, n_inf, min, max, mean, std. A missing or unreadable file gets
+    file_present=False and NaNs so it still shows up in the table.
     """
     rows = []
     for ref in iter_games(root):

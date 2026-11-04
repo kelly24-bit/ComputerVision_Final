@@ -1,4 +1,4 @@
-# Soccer Tactical CV — Project Scaffold
+# ADSP 32023 Final Project: Football Formation & Play Recognition
 
 A computer-vision project that reads tactical structure from football footage:
 what kind of play is happening, and how a team is shaped.

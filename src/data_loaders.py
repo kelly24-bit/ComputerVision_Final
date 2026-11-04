@@ -179,6 +179,62 @@ def class_count_table(ann: pd.DataFrame, classes=CLASSES_V2) -> pd.DataFrame:
     return out.sort_values("count", ascending=False)
 
 
+EXPECTED_TOP_KEYS = frozenset(
+    {"UrlLocal", "UrlYoutube", "annotations", "gameAwayTeam", "gameDate",
+     "gameHomeTeam", "gameScore"}
+)
+EXPECTED_ANN_KEYS = frozenset({"gameTime", "label", "position", "team", "visibility"})
+
+
+def audit_label_schema(root: Path = RAW_ROOT, tol_s: float = 1.5) -> pd.DataFrame:
+    """One row per game describing schema oddities in Labels-v2.json.
+
+    Columns: game_id, file_ok, n_annotations, extra_top_keys, missing_top_keys,
+    n_ann_bad_keys (annotations whose key set != the expected 5),
+    n_bad_gametime (gameTime not '<half> - mm:ss'), n_bad_position (position
+    not an int string), n_time_mismatch (|position_ms/1000 - gameTime seconds|
+    > tol_s), n_bad_team (team not in home/away/'not applicable'), n_url_mismatch (UrlLocal does
+    not match the game's directory path).
+    """
+    rows = []
+    for ref in iter_games(root):
+        row = {"game_id": ref.game_id, "file_ok": False, "n_annotations": 0,
+               "extra_top_keys": "", "missing_top_keys": "", "n_ann_bad_keys": 0,
+               "n_bad_gametime": 0, "n_bad_position": 0, "n_time_mismatch": 0,
+               "n_bad_team": 0, "n_url_mismatch": 0}
+        try:
+            with open(ref.path / LABELS_FILE, encoding="utf-8") as f:
+                d = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError, OSError):
+            rows.append(row)
+            continue
+        row["file_ok"] = True
+        keys = set(d)
+        row["extra_top_keys"] = ",".join(sorted(keys - EXPECTED_TOP_KEYS))
+        row["missing_top_keys"] = ",".join(sorted(EXPECTED_TOP_KEYS - keys))
+        expected_url = f"{ref.league}/{ref.season}/{ref.game}/"
+        row["n_url_mismatch"] = int(d.get("UrlLocal") != expected_url)
+        anns = d.get("annotations", [])
+        row["n_annotations"] = len(anns)
+        for a in anns:
+            if set(a) != EXPECTED_ANN_KEYS:
+                row["n_ann_bad_keys"] += 1
+            half, secs = _parse_game_time(a.get("gameTime", ""))
+            bad_time = np.isnan(secs)
+            row["n_bad_gametime"] += int(bad_time)
+            try:
+                pos = int(a.get("position"))
+            except (TypeError, ValueError):
+                row["n_bad_position"] += 1
+                pos = None
+            if pos is not None and not bad_time and abs(pos / 1000 - secs) > tol_s:
+                row["n_time_mismatch"] += 1
+            if a.get("team") not in ("home", "away", "not applicable"):
+                row["n_bad_team"] += 1
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
 def build_feature_summary(root: Path = RAW_ROOT) -> pd.DataFrame:
     """Per-game, per-half feature-array metadata across all games.
 
